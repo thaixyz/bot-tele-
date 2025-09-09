@@ -1,5 +1,4 @@
 name: burst-workers
-
 on:
   workflow_dispatch:
     inputs:
@@ -20,20 +19,18 @@ jobs:
   make-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.gen.outputs.matrix }}
+      matrix: ${{ steps.set.outputs.matrix }}
     steps:
-      - id: gen
+      - id: set
         shell: bash
         run: |
-          JSON=$(python3 - <<'PY'
-import json, os
-n = int(os.getenv("COUNT","20"))
-print(json.dumps({"idx": list(range(1, n+1))}))
-PY
-)
-          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
-        env:
-          COUNT: ${{ inputs.count }}
+          n=${{ inputs.count }}
+          printf 'matrix={"idx":[' > "$GITHUB_OUTPUT"
+          for i in $(seq 1 "$n"); do
+            if [ "$i" -gt 1 ]; then printf ',' >> "$GITHUB_OUTPUT"; fi
+            printf '%s' "$i" >> "$GITHUB_OUTPUT"
+          done
+          printf ']}\n' >> "$GITHUB_OUTPUT"
 
   run-workers:
     needs: make-matrix
@@ -42,19 +39,14 @@ PY
       fail-fast: false
       max-parallel: ${{ inputs.parallel }}
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install deps
         run: |
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Run worker #${{ matrix.idx }}
         run: |
           echo "START #${{ matrix.idx }}"
