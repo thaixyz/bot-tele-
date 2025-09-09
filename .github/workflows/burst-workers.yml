@@ -1,19 +1,20 @@
 name: burst-workers
+
 on:
   workflow_dispatch:
     inputs:
       count:
         description: "Số worker chạy song song"
         required: true
-        default: "20"
+        default: "5"
       minutes:
         description: "Thời gian chạy mỗi worker (phút)"
         required: true
-        default: "30"
+        default: "1"
       parallel:
         description: "Số job chạy cùng lúc"
         required: true
-        default: "20"
+        default: "5"
 
 jobs:
   make-matrix:
@@ -22,34 +23,15 @@ jobs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
-        shell: bash
-        run: |
-          n=${{ inputs.count }}
-          printf 'matrix={"idx":[' > "$GITHUB_OUTPUT"
-          for i in $(seq 1 "$n"); do
-            if [ "$i" -gt 1 ]; then printf ',' >> "$GITHUB_OUTPUT"; fi
-            printf '%s' "$i" >> "$GITHUB_OUTPUT"
-          done
-          printf ']}\n' >> "$GITHUB_OUTPUT"
+        run: echo "matrix={\"idx\":[1,2,3]}" >> "$GITHUB_OUTPUT"
 
   run-workers:
     needs: make-matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: ${{ inputs.parallel }}
+      max-parallel: ${{ fromJSON(inputs.parallel) }}
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install deps
-        run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Run worker #${{ matrix.idx }}
-        run: |
-          echo "START #${{ matrix.idx }}"
-          python3 vps_worker.py
-          sleep $(( ${{ inputs.minutes }} * 60 ))
-          echo "END   #${{ matrix.idx }}"
+      - run: echo "Worker ${{ matrix.idx }} OK"
