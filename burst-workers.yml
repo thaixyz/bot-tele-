@@ -1,0 +1,67 @@
+name: burst-workers
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Số worker chạy song song"
+        required: true
+        default: "20"
+      minutes:
+        description: "Thời gian chạy mỗi worker (phút)"
+        required: true
+        default: "30"
+      parallel:
+        description: "Số job chạy cùng lúc (max-parallel)"
+        required: true
+        default: "20"
+
+jobs:
+  make-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        run: |
+          python3 - <<'PY'
+import json,os
+n=int(os.getenv('COUNT','20'))
+print(f"matrix={json.dumps({'idx': list(range(1,n+1))})}")
+PY
+          >> $GITHUB_OUTPUT
+        env:
+          COUNT: ${{ inputs.count }}
+
+  run-workers:
+    needs: make-matrix
+    runs-on: ubuntu-latest   # 4 vCPU / 16GB RAM
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.parallel }}
+      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Run worker #${{ matrix.idx }}
+        run: |
+          echo "START worker #${{ matrix.idx }} $(date -u)"
+          python3 vps_worker.py
+          sleep $(( ${{ inputs.minutes }} * 60 ))
+          echo "END   worker #${{ matrix.idx }} $(date -u)"
