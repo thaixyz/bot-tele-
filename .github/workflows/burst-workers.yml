@@ -23,13 +23,15 @@ jobs:
       matrix: ${{ steps.gen.outputs.matrix }}
     steps:
       - id: gen
+        shell: bash
         run: |
-          python3 - <<'PY'
-import json,os
-n=int(os.getenv('COUNT','20'))
-print(f"matrix={json.dumps({'idx': list(range(1,n+1))})}")
+          JSON=$(python3 - <<'PY'
+import json, os
+n = int(os.getenv("COUNT", "20"))
+print(json.dumps({"idx": list(range(1, n+1))}))
 PY
-          >> $GITHUB_OUTPUT
+)
+          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
         env:
           COUNT: ${{ inputs.count }}
 
@@ -46,8 +48,13 @@ PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install deps
-        run: if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Run worker #${{ matrix.idx }}
         run: |
           echo "START #${{ matrix.idx }}"
