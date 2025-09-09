@@ -1,0 +1,56 @@
+name: burst-workers
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Số worker chạy song song"
+        required: true
+        default: "20"
+      minutes:
+        description: "Thời gian chạy mỗi worker (phút)"
+        required: true
+        default: "30"
+      parallel:
+        description: "Số job chạy cùng lúc"
+        required: true
+        default: "20"
+
+jobs:
+  make-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        run: |
+          python3 - <<'PY'
+import json,os
+n=int(os.getenv('COUNT','20'))
+print(f"matrix={json.dumps({'idx': list(range(1,n+1))})}")
+PY
+          >> $GITHUB_OUTPUT
+        env:
+          COUNT: ${{ inputs.count }}
+
+  run-workers:
+    needs: make-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.parallel }}
+      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Run worker #${{ matrix.idx }}
+        run: |
+          echo "START #${{ matrix.idx }}"
+          python3 vps_worker.py
+          sleep $(( ${{ inputs.minutes }} * 60 ))
+          echo "END   #${{ matrix.idx }}"
