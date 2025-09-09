@@ -59,11 +59,13 @@ jobs:
       - name: Run worker #${{ matrix.idx }}
         env:
           WORKER_ID: ${{ matrix.idx }}
-          PAYLOAD_JSON: ${{ inputs.payload }}   # truyền payload vào ENV
-          FORCE_GA: "1"                         # ép chạy GA-mode (không mở Flask)
+          PAYLOAD_JSON: ${{ inputs.payload }}   # Truyền payload từ bot
+          FORCE_GA: "1"                        # Ép chạy GA-mode
         run: |
           echo "START worker #${{ matrix.idx }}"
-          echo "MODE-CHECK: ${PAYLOAD_JSON:0:120}"
-          python3 vps_worker.py
+          echo "Payload received: $PAYLOAD_JSON"
+          # Chuyển payload JSON thành file tạm để script đọc
+          echo "$PAYLOAD_JSON" > payload.json
+          python3 vps_worker.py --payload payload.json
           sleep $(( ${{ inputs.minutes }} * 60 ))
           echo "END worker #${{ matrix.idx }}"
