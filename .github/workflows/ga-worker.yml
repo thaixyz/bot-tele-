@@ -56,16 +56,18 @@ jobs:
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run worker #${{ matrix.idx }}
+      - name: Create payload file and run worker #${{ matrix.idx }}
         env:
           WORKER_ID: ${{ matrix.idx }}
-          PAYLOAD_JSON: ${{ inputs.payload }}   # Truyền payload từ bot
-          FORCE_GA: "1"                        # Ép chạy GA-mode
+          PAYLOAD_JSON: ${{ inputs.payload }}
+          FORCE_GA: "1"
         run: |
           echo "START worker #${{ matrix.idx }}"
           echo "Payload received: $PAYLOAD_JSON"
-          # Chuyển payload JSON thành file tạm để script đọc
+          # Tạo file payload.json với quyền ghi rõ ràng
           echo "$PAYLOAD_JSON" > payload.json
+          chmod +rwx payload.json
+          # Chạy worker với payload file
           python3 vps_worker.py --payload payload.json
           sleep $(( ${{ inputs.minutes }} * 60 ))
           echo "END worker #${{ matrix.idx }}"
