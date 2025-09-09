@@ -27,7 +27,7 @@ jobs:
         run: |
           JSON=$(python3 - <<'PY'
 import json, os
-n = int(os.getenv("COUNT", "20"))
+n = int(os.getenv("COUNT","20"))
 print(json.dumps({"idx": list(range(1, n+1))}))
 PY
 )
