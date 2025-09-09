@@ -59,9 +59,11 @@ jobs:
       - name: Run worker #${{ matrix.idx }}
         env:
           WORKER_ID: ${{ matrix.idx }}
-          PAYLOAD_JSON: ${{ inputs.payload }}
+          PAYLOAD_JSON: ${{ inputs.payload }}   # truyền payload vào ENV
+          FORCE_GA: "1"                         # ép chạy GA-mode (không mở Flask)
         run: |
           echo "START worker #${{ matrix.idx }}"
+          echo "MODE-CHECK: ${PAYLOAD_JSON:0:120}"
           python3 vps_worker.py
           sleep $(( ${{ inputs.minutes }} * 60 ))
           echo "END worker #${{ matrix.idx }}"
