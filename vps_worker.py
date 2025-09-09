@@ -71,29 +71,50 @@ def http_status():
 
 # ========= (C) GA MODE (ENV) =========
 
-def run_ga_mode() -> int:
-    pj = os.getenv("PAYLOAD_JSON", "").strip()
-    if not pj or pj in ("{}", "null"):
-        return 1
-    try:
-        payload = json.loads(pj)
-    except Exception as e:
-        print("Invalid PAYLOAD_JSON:", e)
-        return 2
+def run_ga_mode(payload_file: str = None) -> int:
+    # Đọc payload từ file nếu có, nếu không thử từ env
+    payload = {}
+    if payload_file and os.path.exists(payload_file):
+        try:
+            with open(payload_file, "r") as f:
+                payload = json.load(f)
+            print(f"[GA] Worker #{os.getenv('WORKER_ID', '1')} loaded payload from {payload_file}: {payload}")
+        except Exception as e:
+            print(f"[GA] Error loading payload from {payload_file}: {e}")
+    else:
+        pj = os.getenv("PAYLOAD_JSON", "").strip()
+        if pj and pj not in ("{}", "null"):
+            try:
+                payload = json.loads(pj)
+                print(f"[GA] Worker #{os.getenv('WORKER_ID', '1')} received payload from env: {payload}")
+            except Exception as e:
+                print(f"[GA] Invalid PAYLOAD_JSON: {e}")
+                return 2
 
-    wid = os.getenv("WORKER_ID", "1")
-    print(f"[GA] Worker #{wid} received payload: {payload}")
+    if not payload:
+        print("[GA] No valid payload found, exiting.")
+        return 1
+
     res = process_task(payload)
-    print(json.dumps(res, ensure_ascii=False))
+    print(f"[GA] Worker #{os.getenv('WORKER_ID', '1')} processed task: {json.dumps(res, ensure_ascii=False)}")
     return 0
 
 # ========= (D) ENTRY =========
 
 if __name__ == "__main__":
-    # Ép GA-mode nếu có FORCE_GA=1 hoặc có PAYLOAD_JSON
-    if os.getenv("FORCE_GA") == "1" or os.getenv("PAYLOAD_JSON", "").strip():
-        code = run_ga_mode()
-        sys.exit(code)     # QUAN TRỌNG: không mở Flask sau khi chạy GA-mode
+    # Kiểm tra tham số dòng lệnh cho GA-mode
+    payload_file = None
+    if len(sys.argv) > 1 and sys.argv[1] == "--payload":
+        if len(sys.argv) > 2:
+            payload_file = sys.argv[2]
+        else:
+            print("[GA] Error: --payload requires a file path.")
+            sys.exit(1)
+
+    # Ép GA-mode nếu có FORCE_GA=1 hoặc có payload_file hoặc PAYLOAD_JSON
+    if os.getenv("FORCE_GA") == "1" or payload_file or os.getenv("PAYLOAD_JSON", "").strip():
+        code = run_ga_mode(payload_file)
+        sys.exit(code)  # QUAN TRỌNG: không mở Flask sau khi chạy GA-mode
 
     # Mặc định: VPS mode (HTTP)
     print("[VPS] mode: starting Flask")
