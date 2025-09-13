@@ -8,9 +8,9 @@ on:
         required: true
         default: "5"
       minutes:
-        description: "Mỗi worker chạy bao lâu (phút) - dùng làm giới hạn tối đa"
+        description: "Mỗi worker chạy bao lâu (phút)"
         required: true
-        default: "5"
+        default: "2"
       parallel:
         description: "Số job chạy đồng thời"
         required: true
@@ -83,13 +83,7 @@ jobs:
             echo "Error: payload.json not created!"
             exit 1
           fi
-          # Lấy duration từ payload
-          DURATION=$(jq -r '.args.duration' payload.json 2>/dev/null || echo "${{ fromJSON(inputs.payload).args.duration }}")
-          if [ -z "$DURATION" ]; then
-            DURATION=$(( ${{ inputs.minutes }} * 60 ))
-            echo "Warning: duration not found in payload, using default $DURATION seconds"
-          fi
           # Chạy worker
           python3 vps_worker.py --payload payload.json
-          sleep "$DURATION"
+          sleep $(( ${{ inputs.minutes }} * 60 ))
           echo "END worker #${{ matrix.idx }}"
