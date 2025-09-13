@@ -8,11 +8,11 @@ on:
         default: "20"
         required: false
       minutes:
-        description: Duration per worker (minutes)
+        description: Duration per worker (minutes, 1..360)
         default: "2"
         required: false
       parallel:
-        description: Max parallel jobs
+        description: Max parallel jobs (1..100)
         default: "20"
         required: false
       payload:
@@ -25,59 +25,27 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+      parallel: ${{ steps.build.outputs.parallel }}
+      minutes: ${{ steps.build.outputs.minutes }}
     steps:
       - id: build
         shell: bash
         run: |
           COUNT="${{ inputs.count }}"
-          # sanitize -> integer & clamp to [1..100]
+          PARALLEL="${{ inputs.parallel }}"
+          MINUTES="${{ inputs.minutes }}"
+
+          # --- sanitize & clamp ---
+          # COUNT -> [1..100]
           if ! [[ "$COUNT" =~ ^[0-9]+$ ]]; then COUNT=20; fi
           if [ "$COUNT" -lt 1 ]; then COUNT=1; fi
           if [ "$COUNT" -gt 100 ]; then COUNT=100; fi
 
-          # build JSON: {"worker_id":[1,2,...,COUNT]}
-          LIST=$(seq -s, 1 "$COUNT")
-          JSON_MATRIX="{\"worker_id\":[${LIST}]}"
-          echo "matrix=${JSON_MATRIX}" >> "$GITHUB_OUTPUT"
+          # PARALLEL -> [1..100]
+          if ! [[ "$PARALLEL" =~ ^[0-9]+$ ]]; then PARALLEL=20; fi
+          if [ "$PARALLEL" -lt 1 ]; then PARALLEL=1; fi
+          if [ "$PARALLEL" -gt 100 ]; then PARALLEL=100; fi
 
-  run:
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      # use the raw string inputs.parallel (defaults are strings)
-      max-parallel: ${{ inputs.parallel }}
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
-      fail-fast: false
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      # ---- Run your safe worker here ----
-      - name: Run worker ${{ matrix.worker_id }}
-        shell: bash
-        env:
-          WORKER_ID: ${{ matrix.worker_id }}
-          MINUTES: ${{ inputs.minutes }}
-          PAYLOAD: ${{ inputs.payload }}
-        run: |
-          echo "Starting worker ${WORKER_ID} for ${MINUTES} minute(s)"
-          python - <<'PY'
-          import os, time, json
-          wid = int(os.environ.get("WORKER_ID","0"))
-          mins = int(os.environ.get("MINUTES","1"))
-          payload = os.environ.get("PAYLOAD","{}")
-          try:
-              payload_obj = json.loads(payload)
-          except Exception:
-              payload_obj = {}
-          print(f"[worker {wid}] payload:", payload_obj)
-          # TODO: replace this block with your LEGIT/SAFE task
-          for i in range(mins*6):
-              print(f"[worker {wid}] tick {i}")
-              time.sleep(10)
-          print(f"[worker {wid}] done")
-          PY
+          # MINUTES -> [1..360]
+          if ! [[ "$MINUTES" =~ ^[0-9]+$ ]]; then MINUTES=2; fi
+          if
