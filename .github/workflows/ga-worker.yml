@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        worker_id: ${{ fromJSON(format('[{0}]', join(range(1, fromJSON(inputs.count) | default(50) | int + 1), ','))) }}
-      max-parallel: ${{ fromJSON(inputs.parallel) | default(50) | int }}
+        worker_id: ${{ fromJSON(format('[{0}]', join(range(1, fromJSON(inputs.count) | min(100) + 1), ','))) }}
+      max-parallel: ${{ fromJSON(inputs.parallel) | min(100) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -58,4 +58,4 @@ jobs:
             echo "Worker $WORKER_ID encountered an issue"
             cat vps_worker.log 2>/dev/null || echo "No worker log available"
           }
-        timeout-minutes: ${{ fromJSON(inputs.minutes) | default(2) | int }}
+        timeout-minutes: ${{ fromJSON(inputs.minutes) }}
