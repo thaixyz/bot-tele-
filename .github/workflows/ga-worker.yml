@@ -1,3 +1,25 @@
+name: Dynamic Workers (safe template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Number of workers (max 100)
+        default: "20"
+        required: false
+      minutes:
+        description: Duration per worker (minutes, 1..360)
+        default: "2"
+        required: false
+      parallel:
+        description: Max parallel jobs (1..100)
+        default: "20"
+        required: false
+      payload:
+        description: JSON payload for your worker (optional)
+        default: "{}"
+        required: false
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -13,24 +35,74 @@ jobs:
           PARALLEL="${{ inputs.parallel }}"
           MINUTES="${{ inputs.minutes }}"
 
-          # clamp count [1..100]
+          # COUNT -> [1..100]
           if ! [[ "$COUNT" =~ ^[0-9]+$ ]]; then COUNT=20; fi
           if [ "$COUNT" -lt 1 ]; then COUNT=1; fi
           if [ "$COUNT" -gt 100 ]; then COUNT=100; fi
 
-          # clamp parallel [1..100]
+          # PARALLEL -> [1..100]
           if ! [[ "$PARALLEL" =~ ^[0-9]+$ ]]; then PARALLEL=20; fi
           if [ "$PARALLEL" -lt 1 ]; then PARALLEL=1; fi
           if [ "$PARALLEL" -gt 100 ]; then PARALLEL=100; fi
 
-          # clamp minutes [1..360]
+          # MINUTES -> [1..360]
           if ! [[ "$MINUTES" =~ ^[0-9]+$ ]]; then MINUTES=2; fi
           if [ "$MINUTES" -lt 1 ]; then MINUTES=1; fi
           if [ "$MINUTES" -gt 360 ]; then MINUTES=360; fi
 
-          # build matrix
+          # Build matrix JSON: {"worker_id":[1,2,...,COUNT]}
           LIST=$(seq -s, 1 "$COUNT")
           JSON_MATRIX="{\"worker_id\":[${LIST}]}"
           echo "matrix=$JSON_MATRIX" >> "$GITHUB_OUTPUT"
-          echo "parallel=$PARALLEL" >> "$GITHUB_OUTPUT"
-          echo "minutes=$MINUTES" >> "$GITHUB_OUTPUT"
+
+          # Pass numbers as outputs (to be parsed with fromJSON)
+          echo "parallel=${PARALLEL}" >> "$GITHUB_OUTPUT"
+          echo "minutes=${MINUTES}" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      max-parallel: ${{ fromJSON(needs.prepare.outputs.parallel) }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # ---- Replace this with your LEGIT/SAFE worker task ----
+      - name: Run worker ${{ matrix.worker_id }}
+        shell: bash
+        env:
+          WORKER_ID: ${{ matrix.worker_id }}
+          MINUTES: ${{ needs.prepare.outputs.minutes }}
+          PAYLOAD: ${{ inputs.payload }}
+        run: |
+          echo "Starting worker ${WORKER_ID} for ${MINUTES} minute(s)"
+          python - <<'PY'
+          import os, time, json, sys
+          wid = int(os.environ.get("WORKER_ID","0"))
+          try:
+              mins = int(os.environ.get("MINUTES","2"))
+          except:
+              mins = 2
+          payload_raw = os.environ.get("PAYLOAD","{}")
+          try:
+              payload = json.loads(payload_raw)
+          except Exception as e:
+              print(f"[worker {wid}] payload JSON parse error:", e)
+              payload = {}
+
+          print(f"[worker {wid}] payload:", payload)
+          # >>> Put your legal/safe task here <<<
+          for i in range(max(1, mins)*6):
+              print(f"[worker {wid}] tick {i}")
+              sys.stdout.flush()
+              time.sleep(10)
+          print(f"[worker {wid}] done")
+          PY
