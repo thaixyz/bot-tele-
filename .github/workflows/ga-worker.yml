@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       count:
-        description: 'Number of workers'
+        description: 'Number of workers (max 100)'
         required: true
         default: '50'
       minutes:
@@ -11,7 +11,7 @@ on:
         required: true
         default: '2'
       parallel:
-        description: 'Number of parallel jobs'
+        description: 'Number of parallel jobs (max 100)'
         required: true
         default: '50'
       payload:
@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        worker_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-      max-parallel: ${{ inputs.parallel }}
+        worker_id: ${{ fromJSON(format('[{0}]', join(range(1, fromJSON(inputs.count) + 1), ','))) }}
+      max-parallel: ${{ fromJSON(inputs.parallel) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -41,13 +41,15 @@ jobs:
 
       - name: Download proxy file
         run: |
-          curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}
-          echo "Downloaded proxy.txt"
+          echo "Downloading proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
+          curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }} || echo "Failed to download proxy.txt, using default"
+          ls -l proxy.txt || echo "proxy.txt not found"
 
       - name: Run worker
         env:
           PAYLOAD: ${{ inputs.payload }}
           WORKER_ID: ${{ matrix.worker_id }}
         run: |
+          echo "Running worker $WORKER_ID with payload: $PAYLOAD"
           python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID
-        timeout-minutes: ${{ inputs.minutes }}
+        timeout-minutes: ${{ fromJSON(inputs.minutes) }}
