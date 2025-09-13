@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        worker_id: ${{ fromJSON(format('[{0}]', join(range(1, fromJSON(inputs.count) + 1), ','))) }}
+        worker_id: ${{ fromJSON(format('[{0}]', join(range(1, min(fromJSON(inputs.count), 100) + 1), ','))) }}
       max-parallel: ${{ fromJSON(inputs.parallel) }}
     steps:
       - name: Checkout repository
@@ -41,15 +41,18 @@ jobs:
 
       - name: Download proxy file
         run: |
-          echo "Downloading proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
-          curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }} || echo "Failed to download proxy.txt, using default"
-          ls -l proxy.txt || echo "proxy.txt not found"
+          echo "Attempting to download proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
+          curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }} || {
+            echo "Failed to download proxy.txt, using default or existing file if available"
+            touch proxy.txt
+          }
+          [ -f proxy.txt ] && echo "proxy.txt found, size: $(stat -c%s proxy.txt) bytes" || echo "proxy.txt not created"
 
       - name: Run worker
         env:
           PAYLOAD: ${{ inputs.payload }}
           WORKER_ID: ${{ matrix.worker_id }}
         run: |
-          echo "Running worker $WORKER_ID with payload: $PAYLOAD"
-          python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID
+          echo "Starting worker $WORKER_ID with payload: $PAYLOAD"
+          python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID || echo "Worker $WORKER_ID failed"
         timeout-minutes: ${{ fromJSON(inputs.minutes) }}
