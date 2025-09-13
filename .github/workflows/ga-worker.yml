@@ -39,11 +39,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyTelegramBotAPI psutil requests
 
-      - name: Download proxy file
+      - name: Download or create proxy file
         run: |
           echo "Attempting to download proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
           curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }} || {
-            echo "Failed to download proxy.txt, using default or existing file if available"
+            echo "Download failed, creating empty proxy.txt"
             touch proxy.txt
           }
           [ -f proxy.txt ] && echo "proxy.txt found, size: $(stat -c%s proxy.txt) bytes" || echo "proxy.txt not created"
@@ -54,5 +54,8 @@ jobs:
           WORKER_ID: ${{ matrix.worker_id }}
         run: |
           echo "Starting worker $WORKER_ID with payload: $PAYLOAD"
-          python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID || echo "Worker $WORKER_ID failed"
+          python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID || {
+            echo "Worker $WORKER_ID failed, checking logs"
+            cat vps_worker.log 2>/dev/null || echo "No log file found"
+          }
         timeout-minutes: ${{ fromJSON(inputs.minutes) }}
