@@ -39,23 +39,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyTelegramBotAPI psutil requests
 
-      - name: Download or create proxy file
+      - name: Prepare proxy file
         run: |
-          echo "Attempting to download proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
+          echo "Attempting to fetch proxy.txt from ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }}"
           curl -o proxy.txt ${{ secrets.PROXY_SOURCE_URL || 'https://example.com/proxy.txt' }} || {
-            echo "Download failed, creating empty proxy.txt"
+            echo "Fetch failed, using default or existing proxy.txt"
             touch proxy.txt
           }
-          [ -f proxy.txt ] && echo "proxy.txt found, size: $(stat -c%s proxy.txt) bytes" || echo "proxy.txt not created"
+          [ -f proxy.txt ] && echo "proxy.txt ready, size: $(stat -c%s proxy.txt) bytes" || echo "proxy.txt not available"
 
-      - name: Run worker
+      - name: Execute worker
         env:
           PAYLOAD: ${{ inputs.payload }}
           WORKER_ID: ${{ matrix.worker_id }}
         run: |
-          echo "Starting worker $WORKER_ID with payload: $PAYLOAD"
+          echo "Launching worker $WORKER_ID with payload: $PAYLOAD"
           python vps_worker.py "$PAYLOAD" --worker-id $WORKER_ID || {
-            echo "Worker $WORKER_ID failed, checking logs"
-            cat vps_worker.log 2>/dev/null || echo "No log file found"
+            echo "Worker $WORKER_ID encountered an issue"
+            cat vps_worker.log 2>/dev/null || echo "No worker log available"
           }
         timeout-minutes: ${{ fromJSON(inputs.minutes) }}
