@@ -1,0 +1,59 @@
+name: Windows Dynamic Worker
+
+on:
+  workflow_dispatch: {}   # bấm tay
+  push:
+    branches: [ main ]    # hoặc nhánh bạn muốn
+
+jobs:
+  prepare:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Show OS info
+        shell: powershell
+        run: |
+          Write-Host "Windows version:"
+          ver
+          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+
+      - name: Setup tools
+        shell: powershell
+        run: |
+          choco install -y 7zip
+          choco install -y python --version=3.12.6
+          choco install -y nodejs
+
+  run:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          npm ci
+
+      - name: Run script (PowerShell)
+        shell: powershell
+        run: |
+          Write-Host "Starting worker..."
+          # ví dụ chạy script JS hoặc Python
+          node scripts/worker.js
+          python scripts/run.py
+
+      - name: Upload logs/artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-logs
+          path: logs/**
